@@ -1,0 +1,34 @@
+name: Build & Push Docker Image – Clients API
+
+on:
+  push:
+    branches: ["*"]
+  pull_request:
+    branches: ["*"]
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & Push
+        run: |
+            IMAGE_NAME=$(echo "ghcr.io/${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+            docker build -t $IMAGE_NAME:latest .
+            docker push $IMAGE_NAME:latest
+      - name: Run Docker container & test /health
+        run: |
+            IMAGE_NAME=$(echo "ghcr.io/${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+            CONTAINER_ID=$(docker run -d -p 8000:8000 $IMAGE_NAME)
+            echo "Started container $CONTAINER_ID"
+            sleep 10
+            curl -f http://localhost:8000/health || (docker logs $CONTAINER_ID; exit 1)
