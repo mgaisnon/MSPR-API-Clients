@@ -41,4 +41,4 @@ jobs:
             CONTAINER_ID=$(docker run -d -p 8000:8000 $IMAGE_NAME)
             echo "Started container $CONTAINER_ID"
             sleep 10
-            curl -f http://localhost:8000/health || (docker logs $CONTAINER_ID; exit 1)
+            curl -f http://localhost:8000/clients/health || (docker logs $CONTAINER_ID; exit 1)
