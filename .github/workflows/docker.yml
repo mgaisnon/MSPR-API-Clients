@@ -2,9 +2,19 @@ name: Build & Push Docker Image – Clients API
 
 on:
   push:
-    branches: ["*"]
+    branches:
+      - main
+      - develop
+      - 'release/**'
+      - 'feature/**'
+      - 'hotfix/**'
   pull_request:
-    branches: ["*"]
+    branches:
+      - main
+      - develop
+      - 'release/**'
+      - 'feature/**'
+      - 'hotfix/**'
 
 jobs:
   docker:
