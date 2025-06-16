@@ -1,8 +1,19 @@
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, Session
 
-DATABASE_URL = "mysql+pymysql://user:password@mspr-db-clients:3306/clients_db"
-engine = create_engine(DATABASE_URL)
+# Connexion à ta base MySQL
+SQLALCHEMY_DATABASE_URL = "mysql+mysqlconnector://root:root@localhost:3306/customers_db"
+
+engine = create_engine(SQLALCHEMY_DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
 Base = declarative_base()
+
+# ✅ Fonction get_db à ajouter ici
+def get_db():
+    db: Session = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
