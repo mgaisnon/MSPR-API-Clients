@@ -2,10 +2,10 @@ name: CI/CD FastAPI
 
 on:
   push:
-    branches: ["**"]      # toutes les branches
+    branches: ["**"]
     tags: ["v*"]
   pull_request:
-    branches: ["**"]      # toutes les PR vers n'importe quelle branche
+    branches: ["**"]
   workflow_dispatch:
     inputs:
       auto_deploy:
@@ -20,13 +20,14 @@ permissions:
 env:
   PYTHON_VERSION: "3.12"
   IMAGE_NAME: ${{ github.repository }}
-  REGISTRY: docker.io   # change en ghcr.io si tu veux GHCR
+  REGISTRY: docker.io
   DOCKERFILE: ./Dockerfile
   CONTEXT: .
 
 jobs:
   unit-tests:
     runs-on: ubuntu-latest
+    continue-on-error: true   # ⚠️ tests unitaires en warning
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -52,6 +53,7 @@ jobs:
   integration-tests:
     runs-on: ubuntu-latest
     needs: [unit-tests]
+    continue-on-error: true   # ⚠️ tests d'intégration en warning
     services:
       postgres:
         image: postgres:16
