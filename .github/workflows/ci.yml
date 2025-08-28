@@ -24,6 +24,8 @@ env:
   DOCKERFILE: ./Dockerfile
   CONTEXT: .
   PYTHONPATH: "${{ github.workspace }}"
+  DATABASE_URL: "sqlite:///./test.db"   # ✅ corrige l'erreur
+  API_KEY: "test"
 
 jobs:
   unit-tests:
