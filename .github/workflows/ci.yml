@@ -25,7 +25,7 @@ env:
   CONTEXT: .
   PYTHONPATH: "${{ github.workspace }}"
   DATABASE_URL: "sqlite:///./test.db"   # ✅ corrige l'erreur
-  API_KEY: "test"
+  API_KEY: "secret_key"
 
 jobs:
   unit-tests:
