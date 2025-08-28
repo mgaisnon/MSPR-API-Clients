@@ -9,7 +9,7 @@ def test_create_customer():
         "address_postal_code": "12345", "address_city": "City", "profile_first_name": "Prof",
         "profile_last_name": "User", "company_name": "Comp"
     }, headers={"x-api-key": "secret_key"})
-    assert response.status_code == 200
+    assert response.status_code == 201
     assert "id" in response.json()
 
 def test_read_customers():
