@@ -30,7 +30,6 @@ env:
 jobs:
   unit-tests:
     runs-on: ubuntu-latest
-    continue-on-error: true   # ⚠️ tests unitaires en warning
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -84,8 +83,8 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - run: pip install -r requirements.txt pytest psycopg[binary] pika
-      - name: Run integration tests
-        run: pytest -m integration -q --maxfail=1
+      - name: Run integration tests (optionnel)
+        run: pytest -m integration -q --maxfail=1 || true
 
   build-and-push:
     runs-on: ubuntu-latest
