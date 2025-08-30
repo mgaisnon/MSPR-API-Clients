@@ -492,7 +492,7 @@ jobs:
         id: pat
         shell: bash
         run: |
-          if [ -n "${{ secrets.PAT_REPO_PUSH }}" ]; then
+          if [ -n "${{ env.TARGET_REPO }}" ]; then
             echo "HAVE_PAT=true" >> "$GITHUB_ENV"
             echo "✅ PAT present: will open PR to target repo."
           else
@@ -512,7 +512,6 @@ jobs:
         with:
           repository: ${{ env.TARGET_REPO }}
           ref: ${{ env.TARGET_BRANCH }}
-          token: ${{ secrets.PAT_REPO_PUSH }}  # ok ici car protégé par if:
           path: target-repo
 
       - name: Update image reference in target file
