@@ -18,7 +18,7 @@ permissions:
   packages: write
   pull-requests: write
   actions: read
-  security-events: write 
+  security-events: write
 
 env:
   PYTHON_VERSION: "3.12"
@@ -34,9 +34,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  prepare:
+    name: 🧭 Prepare (image name)
+    runs-on: ubuntu-latest
+    outputs:
+      image_name: ${{ steps.norm.outputs.image_name }}
+    steps:
+      - id: norm
+        shell: bash
+        run: |
+          IMAGE_NAME="$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
+          echo "image_name=$IMAGE_NAME" >> "$GITHUB_OUTPUT"
+
   guard-branch:
     name: 🔒 GitFlow & PR hygiene
     runs-on: ubuntu-latest
+    needs: [prepare]
     if: github.event_name != 'workflow_dispatch'
     steps:
       - name: Check branch naming (GitFlow)
@@ -147,7 +160,9 @@ jobs:
   build-image:
     name: 🏗️ Build Docker image
     runs-on: ubuntu-latest
-    needs: [unit-tests, integration-tests]
+    needs: [prepare, unit-tests, integration-tests]
+    env:
+      IMAGE_NAME: ${{ needs.prepare.outputs.image_name }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
@@ -156,12 +171,8 @@ jobs:
         if: github.event_name != 'pull_request'
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}          
+          username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Normalize image name (lowercase)
-        run: |
-          IMAGE_NAME=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
-          echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
       - uses: docker/metadata-action@v5
         id: meta
         with:
@@ -184,7 +195,9 @@ jobs:
   security-scan:
     name: 🔍 Trivy scan (FS & image)
     runs-on: ubuntu-latest
-    needs: [build-image]
+    needs: [prepare, build-image]
+    env:
+      IMAGE_NAME: ${{ needs.prepare.outputs.image_name }}
     steps:
       - uses: actions/checkout@v4
       - uses: aquasecurity/trivy-action@0.28.0
@@ -193,6 +206,13 @@ jobs:
           ignore-unfixed: true
           format: "table"
           severity: "CRITICAL,HIGH"
+      - name: Login GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Scan built image
         if: github.event_name != 'pull_request'
         uses: aquasecurity/trivy-action@0.28.0
@@ -205,7 +225,6 @@ jobs:
   release-please:
     name: 🏷️ Release & Versioning (Conventional Commits)
     runs-on: ubuntu-latest
-    # On ne release que depuis main (ou manuellement)
     if: github.ref == 'refs/heads/main'
     needs: [security-scan]
     steps:
@@ -236,16 +255,18 @@ jobs:
   build-and-push:
     name: 🚀 Push image (main/tags)
     runs-on: ubuntu-latest
-    needs: [release-please]
+    needs: [prepare, release-please]
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    env:
+      IMAGE_NAME: ${{ needs.prepare.outputs.image_name }}
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/metadata-action@v5
         id: meta
         with:
@@ -265,7 +286,9 @@ jobs:
   deploy:
     name: 📦 Deploy (optionnel)
     runs-on: ubuntu-latest
-    needs: [build-and-push]
+    needs: [prepare, build-and-push]
+    env:
+      IMAGE_NAME: ${{ needs.prepare.outputs.image_name }}
     if: |
       (github.event_name == 'workflow_dispatch' && inputs.auto_deploy) ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AUTO_DEPLOY == 'true')
