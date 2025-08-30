@@ -164,7 +164,6 @@ jobs:
     env:
       IMAGE_NAME: ${{ needs.prepare.outputs.image_name }}
     outputs:
-      image_id: ${{ steps.build.outputs.imageid }}
       image_ref: ${{ steps.out.outputs.image_ref }}
       pushed: ${{ steps.out.outputs.pushed }}
     steps:
@@ -185,30 +184,55 @@ jobs:
             type=ref,event=branch
             type=ref,event=tag
             type=sha
-      - name: Build (push on main/tags, load otherwise)
-        id: build
+
+      # --- Cas 1 : main ou tag -> on PUSH l'image vers le registry ---
+      - name: Build & PUSH (main/tags)
+        id: build-push
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
         uses: docker/build-push-action@v6
         with:
           context: ${{ env.CONTEXT }}
           file: ${{ env.DOCKERFILE }}
-          push: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')) }}
-          load: ${{ !(github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))) }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
           cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
-      - name: Export image ref/pushed flag
+
+      # --- Cas 2 : PR / branches -> on EXPORT en tar puis LOAD localement ---
+      - name: Build & EXPORT (PR/branches)
+        id: build-export
+        if: github.event_name == 'pull_request' || (github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/'))
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ env.CONTEXT }}
+          file: ${{ env.DOCKERFILE }}
+          outputs: type=docker,dest=/tmp/image.tar
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+
+      - name: Docker load (local)
+        if: steps.build-export.outcome == 'success'
+        run: |
+          docker load -i /tmp/image.tar
+          # Vérifie que le premier tag existe localement
+          FIRST_TAG="$(echo "${{ steps.meta.outputs.tags }}" | head -n1)"
+          docker image inspect "$FIRST_TAG" >/dev/null
+
+      - name: Export image ref / pushed flag
         id: out
         shell: bash
         run: |
           FIRST_TAG="$(echo "${{ steps.meta.outputs.tags }}" | head -n1)"
-          # pushed si on est sur main ou tag et pas PR
-          if [[ "${{ github.event_name }}" != "pull_request" && ( "${{ github.ref }}" == "refs/heads/main" || "${{ github.ref }}" == refs/tags/* ) ]]; then
+          if [[ "${{ steps.build-push.outcome }}" == "success" ]]; then
             echo "pushed=true" >> "$GITHUB_OUTPUT"
+            echo "image_ref=$FIRST_TAG" >> "$GITHUB_OUTPUT"
           else
             echo "pushed=false" >> "$GITHUB_OUTPUT"
+            echo "image_ref=$FIRST_TAG" >> "$GITHUB_OUTPUT"
           fi
-          echo "image_ref=$FIRST_TAG" >> "$GITHUB_OUTPUT"
 
   security-scan:
     name: 🔍 Trivy scan (FS & image)
@@ -227,8 +251,8 @@ jobs:
           format: "table"
           severity: "CRITICAL,HIGH"
 
-      # Si l'image a été poussée (main/tags), scanner l'image du registry
-      - name: Login GHCR
+      # Scanner l'image (registry si poussée, sinon locale)
+      - name: Login GHCR (for registry scan)
         if: needs.build-image.outputs.pushed == 'true'
         uses: docker/login-action@v3
         with:
@@ -236,21 +260,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Scan registry image (pushed)
-        if: needs.build-image.outputs.pushed == 'true'
+      - name: Scan image (registry or local)
         uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: ${{ needs.build-image.outputs.image_ref }}
-          ignore-unfixed: true
-          format: "table"
-          severity: "CRITICAL,HIGH"
-
-      # Sinon, scanner l'image locale (buildx --load)
-      - name: Scan local image (loaded)
-        if: needs.build-image.outputs.pushed != 'true'
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          image-ref: ${{ needs.build-image.outputs.image_id }}
           ignore-unfixed: true
           format: "table"
           severity: "CRITICAL,HIGH"
