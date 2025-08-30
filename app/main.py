@@ -47,7 +47,7 @@ def create_customer(customer: schemas.CustomerCreate, db: Session = Depends(get_
     try:
         event_data = {key: value for key, value in new_customer.__dict__.items() if not key.startswith('_')}
         publish_event("customer_created", event_data)
-    except Exception as e:
+    except Exception:
         pass
     return new_customer
 
@@ -66,7 +66,7 @@ def update_customer(customer_id: int, customer: schemas.CustomerCreate, db: Sess
     try:
         event_data = {key: value for key, value in updated.__dict__.items() if not key.startswith('_')}
         publish_event("customer_updated", event_data)
-    except Exception as e:
+    except Exception:
         pass
     return updated
 
@@ -77,6 +77,6 @@ def delete_customer(customer_id: int, db: Session = Depends(get_db), _ = Depends
         raise HTTPException(status_code=404, detail="Customer not found")
     try:
         publish_event("customer_deleted", {"id": customer_id})
-    except Exception as e:
+    except Exception:
         pass
     return {"detail": "Customer deleted"}
