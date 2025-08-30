@@ -119,7 +119,7 @@ jobs:
   lint:
     name: 🧹 Lint & Static analysis
     runs-on: ubuntu-latest
-    needs: [guard-branch]
+    needs: [prepare]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
