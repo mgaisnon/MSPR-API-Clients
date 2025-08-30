@@ -259,18 +259,31 @@ jobs:
           FIRST_TAG="$(echo "${{ steps.meta.outputs.tags }}" | head -n1)"
           docker image inspect "$FIRST_TAG" >/dev/null
 
-      - name: Export image ref / pushed flag
+      - name: Export image ref / pushed flag (with local tag fallback)
         id: out
         shell: bash
+        env:
+          GITHUB_SHA: ${{ github.sha }}
         run: |
           FIRST_TAG="$(echo "${{ steps.meta.outputs.tags }}" | head -n1)"
+
           if [[ "${{ steps.build-push.outcome }}" == "success" ]]; then
             echo "pushed=true" >> "$GITHUB_OUTPUT"
             echo "image_ref=$FIRST_TAG" >> "$GITHUB_OUTPUT"
-          else
-            echo "pushed=false" >> "$GITHUB_OUTPUT"
-            echo "image_ref=$FIRST_TAG" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+
+          # Cas PR/branche: on a exporté en tar + docker load → on crée un TAG LOCAL explicite
+          # pour que Trivy le retrouve sans parler à un registry.
+          REPO="${IMAGE_NAME##*/}"
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          LOCAL_TAG="local/${REPO}:sha-${SHORT_SHA}"
+
+          # Tag local (fonctionne même si FIRST_TAG est un ref GHCR)
+          docker tag "$FIRST_TAG" "$LOCAL_TAG"
+
+          echo "pushed=false" >> "$GITHUB_OUTPUT"
+          echo "image_ref=$LOCAL_TAG" >> "$GITHUB_OUTPUT"
 
   security-scan:
     name: 🔍 Trivy scan (FS & image)
