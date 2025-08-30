@@ -434,9 +434,7 @@ jobs:
       IMAGE_FIELD_REGEX: ${{ inputs.image_field_regex }}
       FORK_OWNER: ${{ inputs.fork_owner }}
 
-    if: |
-      (github.event_name == 'workflow_dispatch' && inputs.auto_deploy) ||
-      (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AUTO_DEPLOY == 'true')
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     steps:
       - name: Checkout (repo courant)
         uses: actions/checkout@v4
@@ -490,16 +488,35 @@ jobs:
           git tag -a "$NEXT" -m "Release $NEXT"
           git push origin "$NEXT"
 
+      - name: Detect PAT presence
+        id: pat
+        shell: bash
+        run: |
+          if [ -n "${{ secrets.PAT_REPO_PUSH }}" ]; then
+            echo "HAVE_PAT=true" >> "$GITHUB_ENV"
+            echo "✅ PAT present: will open PR to target repo."
+          else
+            echo "HAVE_PAT=false" >> "$GITHUB_ENV"
+            echo "ℹ️ No PAT_REPO_PUSH: skipping PR to target repo (will still tag & push image/version here)."
+          fi
+
+      - name: "Info: skipping infra PR (no PAT)"
+        if: env.HAVE_PAT != 'true'
+        run: echo "Skipping checkout/push/PR to ${{ env.TARGET_REPO }} (PAT_REPO_PUSH not set)."
+
+
       # 4) Ouvrir une PR sur l’AUTRE repo pour pointer sur la nouvelle image versionnée
       - name: Checkout target repo (deploy manifests)
+        if: env.HAVE_PAT == 'true'
         uses: actions/checkout@v4
         with:
           repository: ${{ env.TARGET_REPO }}
           ref: ${{ env.TARGET_BRANCH }}
-          token: ${{ secrets.PAT_REPO_PUSH }}
+          token: ${{ secrets.PAT_REPO_PUSH }}  # ok ici car protégé par if:
           path: target-repo
 
       - name: Update image reference in target file
+        if: env.HAVE_PAT == 'true'
         working-directory: target-repo
         env:
           NEXT: ${{ steps.ver.outputs.next }}
@@ -508,25 +525,17 @@ jobs:
           IMAGE_LINE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${NEXT}"
           FILE="${{ env.TARGET_FILE }}"
           REGEX="${{ env.IMAGE_FIELD_REGEX }}"
-
-          if [[ ! -f "$FILE" ]]; then
-            echo "❌ Fichier $FILE introuvable dans $PWD"; exit 1
-          fi
-
-          # Remplace la ligne image: ... par la nouvelle
-          # Exemple compose:   image: ghcr.io/owner/app:vX.Y.Z
-          # Exemple k8s:       image: ghcr.io/owner/app:vX.Y.Z
+          [[ -f "$FILE" ]] || { echo "❌ Fichier $FILE introuvable"; exit 1; }
           if grep -Eq "$REGEX" "$FILE"; then
             sed -E -i "s|$REGEX|  image: ${IMAGE_LINE}|g" "$FILE"
           else
-            echo "⚠️ Aucun champ image trouvé avec REGEX '$REGEX' dans $FILE. Ajoute/ajuste la regexp."
-            exit 1
+            echo "⚠️ Aucun champ image trouvé avec REGEX '$REGEX' dans $FILE"; exit 1
           fi
-
           echo "Nouveau pointeur image: ${IMAGE_LINE}"
           git --no-pager diff -- "$FILE" || true
 
       - name: Commit & push branch
+        if: env.HAVE_PAT == 'true'
         working-directory: target-repo
         env:
           NEXT: ${{ steps.ver.outputs.next }}
@@ -541,6 +550,7 @@ jobs:
           git push -u origin "$BR"
 
       - name: Open PR on target repo
+        if: env.HAVE_PAT == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.PAT_REPO_PUSH }}
