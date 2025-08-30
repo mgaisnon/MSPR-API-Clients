@@ -488,80 +488,21 @@ jobs:
           git tag -a "$NEXT" -m "Release $NEXT"
           git push origin "$NEXT"
 
-      - name: Detect PAT presence
-        id: pat
-        shell: bash
-        run: |
-          if [ -n "${{ env.TARGET_REPO }}" ]; then
-            echo "HAVE_PAT=true" >> "$GITHUB_ENV"
-            echo "✅ PAT present: will open PR to target repo."
-          else
-            echo "HAVE_PAT=false" >> "$GITHUB_ENV"
-            echo "ℹ️ No PAT_REPO_PUSH: skipping PR to target repo (will still tag & push image/version here)."
-          fi
-
-      - name: "Info: skipping infra PR (no PAT)"
-        if: env.HAVE_PAT != 'true'
-        run: echo "Skipping checkout/push/PR to ${{ env.TARGET_REPO }} (PAT_REPO_PUSH not set)."
-
-
-      # 4) Ouvrir une PR sur l’AUTRE repo pour pointer sur la nouvelle image versionnée
-      - name: Checkout target repo (deploy manifests)
-        if: env.HAVE_PAT == 'true'
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.TARGET_REPO }}
-          ref: ${{ env.TARGET_BRANCH }}
-          path: target-repo
-
-      - name: Update image reference in target file
-        if: env.HAVE_PAT == 'true'
-        working-directory: target-repo
+      - name: 🔔 Trigger remote deploy (repository_dispatch)
+        if: ${{ github.ref == 'refs/heads/main' }}
         env:
-          NEXT: ${{ steps.ver.outputs.next }}
+          GH_TOKEN: ${{ secrets.PAT_REPO_PUSH }}   # PAT avec accès au repo infra
+          IMAGE: ${{ env.REGISTRY }}/${{ needs.prepare.outputs.image_name }}:${{ steps.ver.outputs.next }}
         run: |
           set -euo pipefail
-          IMAGE_LINE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${NEXT}"
-          FILE="${{ env.TARGET_FILE }}"
-          REGEX="${{ env.IMAGE_FIELD_REGEX }}"
-          [[ -f "$FILE" ]] || { echo "❌ Fichier $FILE introuvable"; exit 1; }
-          if grep -Eq "$REGEX" "$FILE"; then
-            sed -E -i "s|$REGEX|  image: ${IMAGE_LINE}|g" "$FILE"
-          else
-            echo "⚠️ Aucun champ image trouvé avec REGEX '$REGEX' dans $FILE"; exit 1
-          fi
-          echo "Nouveau pointeur image: ${IMAGE_LINE}"
-          git --no-pager diff -- "$FILE" || true
+          echo "Dispatching deploy_image to ${{ inputs.target_repo }} with $IMAGE"
 
-      - name: Commit & push branch
-        if: env.HAVE_PAT == 'true'
-        working-directory: target-repo
-        env:
-          NEXT: ${{ steps.ver.outputs.next }}
-        run: |
-          set -euo pipefail
-          BR="ci/deploy-${NEXT}"
-          git config user.name  "${{ github.actor }}"
-          git config user.email "${{ github.actor }}@users.noreply.github.com"
-          git checkout -b "$BR"
-          git add "${{ env.TARGET_FILE }}"
-          git commit -m "chore(deploy): update image to $NEXT"
-          git remote set-url origin "https://${{ github.actor }}:${{ env.TARGET_REPO }}@github.com/${{ env.TARGET_REPO }}.git"
-          git push -u origin "$BR"
-
-      - name: Open PR on target repo
-        if: env.HAVE_PAT == 'true'
-        uses: peter-evans/create-pull-request@v6
-        with:
-          token: ${{ secrets.PAT_REPO_PUSH }}
-          path: target-repo
-          commit-message: "chore(deploy): update image to ${{ steps.ver.outputs.next }}"
-          title: "chore(deploy): update image to ${{ steps.ver.outputs.next }}"
-          body: |
-            This PR updates the deployment manifest to use:
-            ```
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.ver.outputs.next }}
-            ```
-          branch: "ci/deploy-${{ steps.ver.outputs.next }}"
-          base: ${{ env.TARGET_BRANCH }}
-          labels: deploy
+          gh api repos/${{ inputs.target_repo }}/dispatches \
+            -f event_type='deploy_image' \
+            -f client_payload="$(jq -nc \
+              --arg image   "$IMAGE" \
+              --arg actor   "${{ github.actor }}" \
+              --arg sha     "${{ github.sha }}" \
+              --arg repo    "${{ github.repository }}" \
+              --arg run_url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              '{image:$image, actor:$actor, sha:$sha, repo:$repo, run_url:$run_url}')"
