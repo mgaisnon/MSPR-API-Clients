@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 from datetime import datetime
 
+
 class CustomerBase(BaseModel):
     name: str
     username: str
@@ -12,8 +13,10 @@ class CustomerBase(BaseModel):
     profile_last_name: str
     company_name: str
 
+
 class CustomerCreate(CustomerBase):
     pass
+
 
 class Customer(CustomerBase):
     id: int
