@@ -546,6 +546,7 @@ jobs:
           git checkout -b "$BR"
           git add "${{ env.TARGET_FILE }}"
           git commit -m "chore(deploy): update image to $NEXT"
+          git remote set-url origin "https://${{ github.actor }}:${{ env.TARGET_REPO }}@github.com/${{ env.TARGET_REPO }}.git"
           git push -u origin "$BR"
 
       - name: Open PR on target repo
