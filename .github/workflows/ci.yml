@@ -52,15 +52,37 @@ jobs:
     needs: [prepare]
     if: github.event_name != 'workflow_dispatch'
     steps:
-      - name: Check branch naming (GitFlow)
+      - name: Check branch naming (GitFlow + Merge Queue)
+        shell: bash
         run: |
-          BR="${GITHUB_REF_NAME}"
-          if [[ "$BR" == "main" || "$BR" == "develop" || "$BR" =~ ^feature/ || "$BR" =~ ^release/ || "$BR" =~ ^hotfix/ ]]; then
-            echo "Branch OK ($BR)"
-          else
-            echo "❌ Branch '$BR' non conforme. Utilise main|develop|feature/*|release/*|hotfix/*"
-            exit 1
+          set -euo pipefail
+
+          # Désactivation facultative : BRANCH_GUARD=off
+          if [[ "${BRANCH_GUARD:-on}" == "off" ]]; then
+            echo "Branch guard disabled (BRANCH_GUARD=off)"; exit 0
           fi
+
+          # Les tags ne sont pas concernés
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            echo "Tag build (${GITHUB_REF_NAME}) - skipping branch guard"; exit 0
+          fi
+
+          BR="${GITHUB_REF_NAME}"
+
+          if [[ "$BR" =~ ^(main|develop)$ \
+            || "$BR" =~ ^(feature|release|hotfix)\/.+$ \
+            || "$BR" =~ ^dependabot\/.+$ \
+            || "$BR" =~ ^renovate\/.+$ \
+            || "$BR" =~ ^gh-readonly-queue\/.+$ \
+            || "$BR" =~ ^[0-9]+\/merge$ ]]; then
+            echo "Branch OK ($BR)"
+            exit 0
+          fi
+
+          printf '%s\n' "❌ Branch '$BR' non conforme." \
+                        "Attendus: main|develop|feature/*|release/*|hotfix/*|dependabot/*|renovate/*|gh-readonly-queue/*|<number>/merge"
+          exit 1
+
       - name: Validate PR title (Conventional Commits)
         if: github.event_name == 'pull_request'
         uses: amannn/action-semantic-pull-request@v5
