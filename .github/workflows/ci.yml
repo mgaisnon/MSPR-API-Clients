@@ -146,7 +146,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [lint]
     env:
-      DaTABASE_URL: "sqlite:///:memory:"
+      TESTING: "1"
+      DATABASE_URL: "sqlite:///./test.db"             # ceinture et bretelles
+      SQLALCHEMY_DATABASE_URL: "sqlite:///./test.db"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
