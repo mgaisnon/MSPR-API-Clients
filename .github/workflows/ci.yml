@@ -90,7 +90,17 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           types: |
-            feat, fix, chore, ci, docs, style, refactor, perf, test, build, revert
+            feat
+            fix
+            chore
+            ci
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            revert
           requireScope: false
 
   lint:
