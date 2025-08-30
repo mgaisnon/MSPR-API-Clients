@@ -434,7 +434,7 @@ jobs:
       IMAGE_FIELD_REGEX: ${{ inputs.image_field_regex }}
       FORK_OWNER: ${{ inputs.fork_owner }}
 
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    if: ${{ inputs.auto_deploy && github.ref == 'refs/heads/main' }}
     steps:
       - name: Checkout (repo courant)
         uses: actions/checkout@v4
