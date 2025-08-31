@@ -29,6 +29,9 @@ def verify_api_key(x_api_key: str = Header(None)):
     if x_api_key != API_KEY:
         raise HTTPException(status_code=403, detail="Invalid API Key")
 
+@app.get("/")
+def read_root():
+    return {"message": "Bienvenue sur l'API Clients 🎉"}
 
 @app.get("/customers/", response_model=list[schemas.Customer])
 def read_customers(
