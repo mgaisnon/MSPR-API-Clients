@@ -1,2 +1,5 @@
 
 .DS_Store
+.env
+.python-version
+app/__pycache__/
