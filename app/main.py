@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, Depends, HTTPException, Header, status, APIRouter
+from fastapi import FastAPI, Depends, HTTPException, Header, status
 from sqlalchemy.orm import Session
 from prometheus_fastapi_instrumentator import Instrumentator
 from dotenv import load_dotenv
@@ -29,8 +29,6 @@ def verify_api_key(x_api_key: str = Header(None)):
     if x_api_key != API_KEY:
         raise HTTPException(status_code=403, detail="Invalid API Key")
     
-router = APIRouter(prefix="/clients")
-
 @app.get("/")
 def read_root():
     return {"message": "Bienvenue sur l'API Clients 🎉"}
